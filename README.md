@@ -17,3 +17,4 @@ Compile option for opencv matrix return for further processing
 g++ os_windows.cpp -o os_windows.exe -I"path/yourOpencvIncludeDir" -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_imgcodecs -lgdi32 -DSAVE_BMP -DTEST -g
 ```
 
+This library aims to be crossplatform in the future, however at the moment only windows is the only operating system that is supported
