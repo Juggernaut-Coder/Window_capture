@@ -133,7 +133,7 @@ int main() {
     const wchar_t* exeName = L"brave";
     void *ret = CaptureWindow(exeName);
 #ifdef SAVE_OPENCV    
-    auto ptr = (cv::Mat*)ret
+    auto ptr = (cv::Mat*)ret;
     delete ptr;
 #endif
     return EXIT_SUCCESS;
