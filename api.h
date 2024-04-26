@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <iostream>
 #endif 
+#include "C_macros/assert_exit/assert_exit.h"
 #include <cstdbool>
 #include <vector>
 using std::vector;

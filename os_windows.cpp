@@ -1,5 +1,4 @@
 #include "api.h"
-#include "assert_exit.h"
 
 static vector<DWORD> *pid_list = new vector<DWORD>();
 static inline void fill_pid_list(const wchar_t* exeName) {
