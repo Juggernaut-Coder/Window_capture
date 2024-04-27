@@ -1,5 +1,11 @@
 #include "api.h"
 
+#ifdef SAVE_OPENCV
+#include <opencv2/opencv.hpp>
+#elif !defined(SAVE_BMP)
+#error SAVE METHOD NOT DECLARED
+#endif
+
 static vector<DWORD> *pid_list = new vector<DWORD>();
 static inline void fill_pid_list(const wchar_t* exeName) {
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -50,6 +56,7 @@ static inline void save_bmp(HBITMAP hbmWin, HDC memDC) {
     GetObject(hbmWin, sizeof(BITMAP), &bmpWin);
     BITMAPFILEHEADER bmfHeader;
     BITMAPINFOHEADER bi;
+    memset(&bi, 0, sizeof(bi));
     bi.biSize = sizeof(BITMAPINFOHEADER);
     bi.biWidth = bmpWin.bmWidth;
     bi.biHeight = bmpWin.bmHeight;
@@ -89,9 +96,8 @@ static inline void save_bmp(HBITMAP hbmWin, HDC memDC) {
 void *CaptureWindow(const wchar_t *exeName) {
     WindowHandle win = get_win_from_pid(exeName);
     ASSERT_EXIT(win, "Failed to get window handle");
-    // Ensure the window is not minimized
     if(IsIconic(win)) { 
-        ShowWindow(win, SW_MAXIMIZE); // Give time for the window to maximize
+        ShowWindow(win, SW_MAXIMIZE);
         Sleep(100);
     }
     SetForegroundWindow(win);
@@ -121,15 +127,22 @@ void *CaptureWindow(const wchar_t *exeName) {
 #ifdef SAVE_BMP    
     save_bmp(hbmWin, memDC);
 #elif defined(SAVE_OPENCV)
-    cv::Mat* image = new cv::Mat(bi.biHeight, bi.biWidth, CV_8UC4, lpbitmap);
-    cv::cvtColor(*image, *image, cv::COLOR_BGRA2RGB);
+    BITMAPINFO bmi;
+    memset(&bmi, 0, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h; // Negative height to ensure correct orientation
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    bmi.bmiHeader.biSizeImage = 0;
+    cv::Mat *image = new cv::Mat(h, w, CV_8UC4);
+    GetDIBits(memDC, hbmWin, 0, h, image->data, &bmi, DIB_RGB_COLORS);
     ret = image;
 #endif
     cleanup();
     return ret;
 }
-
-
 
 #ifdef TEST
 int main() {
@@ -137,6 +150,9 @@ int main() {
     void *ret = CaptureWindow(exeName);
 #ifdef SAVE_OPENCV    
     auto ptr = (cv::Mat*)ret;
+    cv::imshow("Brave Screenshot", (*img));
+    cv::waitKey(0);
+    cv::destroyAllWindows();
     delete ptr;
 #endif
     return EXIT_SUCCESS;

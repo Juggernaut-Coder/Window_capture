@@ -24,10 +24,4 @@ typedef Window WindowHandle;
 #error Unsupported platform or configuration
 #endif
 
-#ifdef SAVE_OPENCV
-#include <opencv2/opencv.hpp>
-#elif !defined(SAVE_BMP)
-#error SAVE METHOD NOT DECLARED
-#endif
-
 void * CaptureWindow(const wchar_t* exeName);
