@@ -45,11 +45,54 @@ static inline WindowHandle get_win_from_pid(const wchar_t* exeName) {
     return cp.win;
 }
 
+static inline void save_bmp(HBITMAP hbmWin, HDC memDC) {
+    BITMAP bmpWin;
+    GetObject(hbmWin, sizeof(BITMAP), &bmpWin);
+    BITMAPFILEHEADER bmfHeader;
+    BITMAPINFOHEADER bi;
+    bi.biSize = sizeof(BITMAPINFOHEADER);
+    bi.biWidth = bmpWin.bmWidth;
+    bi.biHeight = bmpWin.bmHeight;
+    bi.biPlanes = 1;
+    bi.biBitCount = 32;
+    bi.biCompression = BI_RGB;
+    bi.biSizeImage = 0;
+    bi.biXPelsPerMeter = 0;
+    bi.biYPelsPerMeter = 0;
+    bi.biClrUsed = 0;
+    bi.biClrImportant = 0;
+    DWORD dwBmpSize = ((bmpWin.bmWidth * bi.biBitCount + 31) / 32) * 4 * bmpWin.bmHeight;
+    HANDLE hDIB = GlobalAlloc(GHND, dwBmpSize);
+    char *lpbitmap = (char*)GlobalLock(hDIB);
+    GetDIBits(memDC, hbmWin, 0,
+        (UINT)bmpWin.bmHeight,
+        lpbitmap,
+        (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    HANDLE hFile = CreateFileW(L"./captureqwsx.bmp",
+        GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD dwSizeofDIB = dwBmpSize + sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+    bmfHeader.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER);
+    bmfHeader.bfType = 0x4D42;
+    DWORD dwBytesWritten = 0;
+    WriteFile(hFile, (LPSTR)&bmfHeader, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
+    WriteFile(hFile, (LPSTR)&bi, sizeof(BITMAPINFOHEADER), &dwBytesWritten, NULL);
+    WriteFile(hFile, (LPSTR)lpbitmap, dwBmpSize, &dwBytesWritten, NULL);
+    CloseHandle(hFile);
+    GlobalUnlock(hDIB);
+    GlobalFree(hDIB);
+}
+
 void *CaptureWindow(const wchar_t *exeName) {
     WindowHandle win = get_win_from_pid(exeName);
     ASSERT_EXIT(win, "Failed to get window handle");
-    if(IsIconic(win)) {
-        ShowWindow(win, SW_MAXIMIZE);
+    // Ensure the window is not minimized
+    if(IsIconic(win)) { 
+        ShowWindow(win, SW_MAXIMIZE); // Give time for the window to maximize
+        Sleep(100);
     }
     SetForegroundWindow(win);
     RECT rect;
@@ -73,55 +116,15 @@ void *CaptureWindow(const wchar_t *exeName) {
         DeleteDC(memDC);
         ReleaseDC(NULL, winDC);
     };
-    ASSERT_EXIT(BitBlt(memDC, 0, 0, w, h, winDC, rect.left, rect.top, SRCCOPY), "BitBlt failed", cleanup());
-    BITMAP bmpWin;
-    GetObject(hbmWin, sizeof(BITMAP), &bmpWin);
-    BITMAPFILEHEADER bmfHeader;
-    BITMAPINFOHEADER   bi;
-    bi.biSize = sizeof(BITMAPINFOHEADER);
-    bi.biWidth = bmpWin.bmWidth;
-    bi.biHeight = bmpWin.bmHeight;
-    bi.biPlanes = 1;
-    bi.biBitCount = 32;
-    bi.biCompression = BI_RGB;
-    bi.biSizeImage = 0;
-    bi.biXPelsPerMeter = 0;
-    bi.biYPelsPerMeter = 0;
-    bi.biClrUsed = 0;
-    bi.biClrImportant = 0;
-    DWORD dwBmpSize = ((bmpWin.bmWidth * bi.biBitCount + 31) / 32) * 4 * bmpWin.bmHeight;
-    HANDLE hDIB = GlobalAlloc(GHND, dwBmpSize);
-    char *lpbitmap = (char*)GlobalLock(hDIB);
-    GetDIBits(winDC, hbmWin, 0,
-        (UINT)bmpWin.bmHeight,
-        lpbitmap,
-        (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-    void * ret = NULL;
-#ifdef SAVE_BMP
-    HANDLE hFile = CreateFileW(L"./captureqwsx.bmp",
-        GENERIC_WRITE,
-        0,
-        NULL,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL, NULL);
-    DWORD dwSizeofDIB = dwBmpSize + sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-    bmfHeader.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER);
-    bmfHeader.bfType = 0x4D42;
-    DWORD dwBytesWritten = 0;
-    WriteFile(hFile, (LPSTR)&bmfHeader, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
-    WriteFile(hFile, (LPSTR)&bi, sizeof(BITMAPINFOHEADER), &dwBytesWritten, NULL);
-    WriteFile(hFile, (LPSTR)lpbitmap, dwBmpSize, &dwBytesWritten, NULL);
-    CloseHandle(hFile);
+    ASSERT_EXIT(StretchBlt(memDC, 0, 0, w, h, winDC, rect.left, rect.top, w, h, SRCCOPY), "StretchBlt failed", cleanup());
+    void *ret = NULL;
+#ifdef SAVE_BMP    
+    save_bmp(hbmWin, memDC);
 #elif defined(SAVE_OPENCV)
     cv::Mat* image = new cv::Mat(bi.biHeight, bi.biWidth, CV_8UC4, lpbitmap);
     cv::cvtColor(*image, *image, cv::COLOR_BGRA2RGB);
     ret = image;
-#ifdef TEST
-    std::cout << "img = \n"<< " "  << (*image) << "\n\n";
 #endif
-#endif
-    GlobalUnlock(hDIB);
-    GlobalFree(hDIB);
     cleanup();
     return ret;
 }
